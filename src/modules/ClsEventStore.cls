@@ -15,7 +15,7 @@ Option Explicit
 ' =============================================================================
 
 ' - Private Constants -----------------
-Private Const ERRNO_NOT_INITIALIZED As Long = 50101
+Private Const ERRNO_NOT_INITIALIZED As Long = 50103
 Private Const ERRMSG_NOT_INITIALIZED As String = "Das EventStore-Objekt wurde nicht mit 'Init' initialisiert"
 
 ' - Private variables -----------------
@@ -53,16 +53,16 @@ End Sub
 ' Parameters:
 '   events          - Collection of DomainEvent; must not be empty
 ' =============================================================================
-Public Sub AddEvents(ByVal events As Collection)
+Public Sub AddEvents(ByVal Events As Collection)
 
     If Not isInitialized Then
         Err.Raise ERRNO_NOT_INITIALIZED, "ClsEventStore.AddEvents", ERRMSG_NOT_INITIALIZED
     End If
 
-    If events.Count = 0 Then Exit Sub
+    If Events.Count = 0 Then Exit Sub
 
     Dim firstEvt As ClsDomainEvent
-    Set firstEvt = events(1)
+    Set firstEvt = Events(1)
 
     ' --- Write all events inside a single DAO transaction ---
     m_Workspace.BeginTrans
@@ -72,11 +72,11 @@ Public Sub AddEvents(ByVal events As Collection)
     Dim rs As DAO.Recordset
     Set rs = m_DbConn.OpenRecordset("domain_events", dbOpenDynaset)
 
-    Dim evt As ClsDomainEvent
-    For Each evt In events
-        Call InsertEvent(rs, evt)
-        Call NotifyListeners(evt)
-    Next evt
+    Dim Evt As ClsDomainEvent
+    For Each Evt In Events
+        Call InsertEvent(rs, Evt)
+        Call NotifyListeners(Evt)
+    Next Evt
 
     rs.Close
     Set rs = Nothing
@@ -92,7 +92,7 @@ ErrAddEvents:
     errDesc = Err.Description
     
     On Error Resume Next
-    rs.Close
+        rs.Close
     Set rs = Nothing
     m_Workspace.Rollback
 
@@ -110,7 +110,7 @@ Public Function ReadEventById(ByVal pEventId As String) As ClsDomainEvent
     On Error GoTo ErrReadEventById
 
     Dim rs As DAO.Recordset
-    m_QuerySqlEventsById.Parameters("pEventId").Value = pEventId
+    m_QuerySqlEventsById.Parameters("pEventId").Value = "{" & pEventId & "}"
     Set rs = m_QuerySqlEventsById.OpenRecordset(dbOpenSnapshot, dbReadOnly)
 
     If rs.EOF Then
@@ -127,9 +127,12 @@ ErrReadEventById:
     Dim errNo As Integer: errNo = Err.Number
     Dim errMsg As String: errMsg = Err.Description
     Dim errSrc As String: errSrc = "ClsEventStore.ReadEventById"
+    
     On Error Resume Next
     
+    If Not rs Is Nothing Then
     rs.Close
+    End If
     Set rs = Nothing
     Err.Raise errNo, errSrc, errMsg
     
@@ -268,6 +271,21 @@ Public Sub AddListener(ByVal listener As IfaceEventListener)
 End Sub
 
 ' =============================================================================
+' Rebuilds an aggregate by replaying the given events
+'   Parameters:
+'       pAggregateRoot: a reference to an object, which as to be rebuildet.
+'                       the caller is responsible to call it with an appropriate object
+'       pEvents:        a Collection of events, class ClsDomainEvent, which
+'                       have to be replayed
+' =============================================================================
+Public Sub Replay(ByRef pAggregateRoot As IAggregateRoot, ByRef pEvents As Collection)
+    Dim Evt As ClsDomainEvent
+    For Each Evt In pEvents
+        pAggregateRoot.Apply Evt
+    Next Evt
+End Sub
+
+' =============================================================================
 ' Returns True if the listener object is already in the collection
 ' (reference equality).
 ' =============================================================================
@@ -283,10 +301,10 @@ Private Function ListenerExists(ByVal col As Collection, ByVal listener As Iface
 End Function
 
 ' Calls Handle() on every Event listener.
-Private Sub NotifyListeners(ByVal evt As ClsDomainEvent)
+Private Sub NotifyListeners(ByVal Evt As ClsDomainEvent)
     Dim listener As IfaceEventListener
     For Each listener In m_Listeners
-        listener.Handle evt
+        listener.Handle Evt
     Next listener
 End Sub
 
@@ -297,20 +315,21 @@ End Sub
 '   rs: an opened Recordset of type DAO.Recordset, where the event has to be written.
 '   evt: the event of type ClsDomainEvent, which has to be written
 ' =============================================================================
-Private Sub InsertEvent(ByRef rs As DAO.Recordset, ByVal evt As ClsDomainEvent)
+Private Sub InsertEvent(ByRef rs As DAO.Recordset, ByVal Evt As ClsDomainEvent)
     
     On Error GoTo ErrInsertEvent
        
     rs.AddNew
-    rs("event_id") = evt.EventId
-    rs("event_type") = evt.EventType
-    rs("subject") = evt.subject
-    rs("version") = evt.Version
-    rs("event_time") = evt.EventTime
-    rs("event_source") = evt.EventSource
-    rs("data") = evt.Data
-    rs("content_type") = evt.DataContentType
-    rs("auth_id") = evt.AuthId
+    rs("event_id") = "{" & Evt.EventId & "}"
+    rs("aggregate_type") = Evt.AggregateType
+    rs("event_type") = Evt.EventType
+    rs("subject") = Evt.Subject
+    rs("version") = Evt.Version
+    rs("event_time") = Evt.EventTime
+    rs("event_source") = Evt.EventSource
+    rs("data") = Evt.Data
+    rs("content_type") = Evt.DataContentType
+    rs("auth_id") = Evt.AuthId
     rs.Update
     Exit Sub
     
@@ -332,11 +351,11 @@ End Sub
 ' Returns the highest version currently stored for the given subject, or -1
 ' if no events exist for that subject yet.
 ' =============================================================================
-Private Function GetMaxVersion(ByVal subject As String) As Long
+Private Function GetMaxVersion(ByVal Subject As String) As Long
 
     On Error GoTo ErrGetMaxVersion
     
-    m_QuerySqlMaxVersion.Parameters("pSubject").Value = subject
+    m_QuerySqlMaxVersion.Parameters("pSubject").Value = Subject
     Dim rs As DAO.Recordset
     Set rs = m_QuerySqlMaxVersion.OpenRecordset(dbOpenSnapshot, dbForwardOnly)
     
@@ -379,7 +398,7 @@ Private Sub InitQueries(ByRef pDb As DAO.Database)
     
     Dim SqlEventsById As String
     SqlEventsById = "PARAMETERS " & _
-                    "pEventId String; " & _
+                    "pEventId Guid; " & _
                     "SELECT * FROM domain_events WHERE event_id = pEventId"
                     
     Set m_QuerySqlEventsById = pDb.CreateQueryDef("", SqlEventsById)
@@ -404,12 +423,14 @@ Private Function RecordsetToEvent(ByRef rs As DAO.Recordset) As ClsDomainEvent
     Set DomainEvent = New ClsDomainEvent
     
     Dim pEventId As String
+    Dim pAggregateType As String
     Dim pEventType As String
     Dim pEventSource As String
     Dim pSubject As String
     Dim pVersion As Long
     Dim pEventTime As String
     Dim pEventData As String
+    Dim pContentType As String
     Dim pAuthId As String
     
     pEventId = rs("event_id").Value
@@ -419,9 +440,10 @@ Private Function RecordsetToEvent(ByRef rs As DAO.Recordset) As ClsDomainEvent
     pVersion = rs("version").Value
     pEventTime = rs("event_time").Value
     pEventData = rs("data").Value
+    pContentType = rs("content_type").Value
     pAuthId = rs("auth_id").Value
     
-    Call DomainEvent.InitFromDb(pEventId, pEventType, pEventSource, pSubject, pVersion, pEventTime, pEventData, pAuthId)
+    Call DomainEvent.InitFromDb(pEventId, pAggregateType, pEventType, pEventSource, pSubject, pVersion, pEventTime, pEventData, pContentType, pAuthId)
     Set RecordsetToEvent = DomainEvent
     Exit Function
     
@@ -465,7 +487,7 @@ Private Sub EnsureTable(ByRef pDbConn As DAO.Database)
 
     ' event_id: UUID string, must be unique
     Dim fldId As DAO.Field
-    Set fldId = newTable.CreateField("event_id", dbText, 36)
+    Set fldId = newTable.CreateField("event_id", dbGUID)
     fldId.Required = True
     newTable.Fields.Append fldId
 
@@ -474,6 +496,13 @@ Private Sub EnsureTable(ByRef pDbConn As DAO.Database)
     Set fldType = newTable.CreateField("event_type", dbText, 255)
     fldType.Required = True
     newTable.Fields.Append fldType
+    
+    ' aggregate_type: e.g. "user"
+    Dim fldAggType As DAO.Field
+    Set fldAggType = newTable.CreateField("aggregate_type", dbText, 255)
+    fldAggType.Required = True
+    fldAggType.AllowZeroLength = False
+    newTable.Fields.Append fldAggType
     
     ' event_source: e.g. "machine_x"
     Dim fldSource As DAO.Field

@@ -2,7 +2,7 @@ VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
 END
-Attribute VB_Name = "IfaceEventListener"
+Attribute VB_Name = "IEventListener"
 Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
@@ -32,5 +32,5 @@ Option Explicit
 ' Implement this method in every listener class.
 ' Called by the EventStore for each event, either within the transaction
 ' (transactional listener) or after a successful commit (post-commit listener).
-Public Sub Handle(ByVal Evt As ClsDomainEvent)
+Public Sub Handle(ByVal evt As DomainEvent)
 End Sub
