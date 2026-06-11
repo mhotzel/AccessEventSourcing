@@ -44,11 +44,11 @@ Private m_AuthId            As String               ' optional: ID of the user/p
 '   pSubject     - required; UUID of the aggregate this event belongs to
 '   pAuthId      - optional; identifier of the triggering user or process
 ' =============================================================================
-Public Sub Init(ByVal pAggregateType As String, ByVal pEventType As String, _
+Public Sub Init(ByVal pEventType As String, _
                 ByVal pSubject As String, Optional ByVal pData As String = "")
                 
     m_EventId = ModUUIDGenerator.GenerateUUIDv7()
-    m_AggregateType = pAggregateType
+    m_AggregateType = ""
     m_EventType = pEventType
     m_Subject = pSubject
     m_EventTime = ModTimeStampGenerator.GetUtcIsoTimestamp()
@@ -73,6 +73,14 @@ End Sub
 ' =============================================================================
 Public Sub AddAuthId(ByVal pAuthId As String)
     m_AuthId = pAuthId
+End Sub
+
+' =============================================================================
+' Adds the Aggregate Type to the Domain Event. Separate Sub, because it can be
+' done by the Aggregate Manager
+' =============================================================================
+Public Sub AddAggregateType(ByVal pAggregateType As String)
+    m_AggregateType = pAggregateType
 End Sub
 
 ' =============================================================================

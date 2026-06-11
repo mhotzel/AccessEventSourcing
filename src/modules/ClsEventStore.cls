@@ -40,7 +40,7 @@ Public Sub Init(ByRef pWorkspace As DAO.Workspace, pDbPath)
     
     Set m_Workspace = pWorkspace
     Set m_DbConn = m_Workspace.OpenDatabase(pDbPath)
-    Call EnsureTable(m_DbConn)
+    Call EnsureTableDomainEvents(m_DbConn)
     Call InitQueries(m_DbConn)
 
 End Sub
@@ -465,7 +465,7 @@ End Function
 ' Creates the domain_events table and its indexes if they do not exist yet.
 ' Called once from Init().
 ' =============================================================================
-Private Sub EnsureTable(ByRef pDbConn As DAO.Database)
+Private Sub EnsureTableDomainEvents(ByRef pDbConn As DAO.Database)
 
     ' Check if the table already exists
     Dim tbl As DAO.TableDef

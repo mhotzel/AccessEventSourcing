@@ -68,13 +68,15 @@ Public Sub TestWriteEvent()
     
     Dim Evt As ClsDomainEvent
     Set Evt = New ClsDomainEvent
-    Call Evt.Init("user", "user.registered", "machine-x", Subject)
+    Call Evt.Init("user.registered", "machine-x", Subject)
     Evt.AddEventSource "DlsMember"
+    Evt.AddAggregateType "user"
     
     Dim evt2 As ClsDomainEvent
     Set evt2 = New ClsDomainEvent
-    Call evt2.Init("user", "user.changed", "machine-x", Subject)
+    Call evt2.Init("user.changed", "machine-x", Subject)
     evt2.AddEventSource "DlsMember"
+    evt2.AddAggregateType "user"
     evt2.Version = Evt.Version + 1
     
     Dim Events As Collection: Set Events = New Collection
@@ -125,6 +127,7 @@ Public Sub TestReadEventById()
     Set Evt = New ClsDomainEvent
     Call Evt.Init("user.registered", "machine-x", Subject)
     Evt.AddEventSource "DlsManager"
+    Evt.AddAggregateType "user"
     
     Dim evtId As String
     evtId = Evt.EventId
@@ -133,6 +136,7 @@ Public Sub TestReadEventById()
     Set evt2 = New ClsDomainEvent
     Call evt2.Init("user.changed", "machine-x", Subject)
     evt2.AddEventSource "DlsManager"
+    evt2.AddAggregateType "user"
     evt2.Version = Evt.Version + 1
     
     Dim Events As Collection: Set Events = New Collection
@@ -183,16 +187,18 @@ Public Sub TestReadEventsBySubject()
     
     Dim Evt As ClsDomainEvent
     Set Evt = New ClsDomainEvent
-    Call Evt.Init("user", "user.registered", Subject)
+    Call Evt.Init("user.registered", Subject)
     Evt.AddEventSource "DlsManager"
+    Evt.AddAggregateType "user"
     
     Dim evtId As String
     evtId = Evt.EventId
     
     Dim evt2 As ClsDomainEvent
     Set evt2 = New ClsDomainEvent
-    Call evt2.Init("user", "user.changed", Subject)
+    Call evt2.Init("user.changed", Subject)
     evt2.AddEventSource "DlsManager"
+    evt2.AddAggregateType "user"
     evt2.Version = Evt.Version + 1
     
     Dim Events As Collection: Set Events = New Collection
@@ -250,7 +256,8 @@ Public Sub TestReadAllEventsAfter()
     
     Dim Evt As ClsDomainEvent
     Set Evt = New ClsDomainEvent
-    Call Evt.Init("user", "user.registered", Subject)
+    Call Evt.Init("user.registered", Subject)
+    Evt.AddAggregateType "user"
     Evt.AddEventSource "DlsManager"
     
     Dim evtId As String
@@ -258,8 +265,9 @@ Public Sub TestReadAllEventsAfter()
     
     Dim evt2 As ClsDomainEvent
     Set evt2 = New ClsDomainEvent
-    Call evt2.Init("user", "user.changed", Subject)
+    Call evt2.Init("user.changed", Subject)
     evt2.AddEventSource "DlsManager"
+    evt2.AddAggregateType "user"
     evt2.Version = Evt.Version + 1
     
     Dim Events As Collection: Set Events = New Collection
@@ -430,6 +438,83 @@ Public Sub TestCoopAcceptMembership()
 
     
 ErrTestCoopAcceptMembership:
+    
+    Dim errNo As Long: errNo = Err.Number
+    Dim errMsg As String: errMsg = Err.Description
+    Dim errSrc As String: errSrc = Err.Source
+    
+    On Error Resume Next
+    
+    evtStore.CloseEventStore
+    ws.Close
+    
+    Err.Raise errNo, errSrc, errSrc & " - " & errMsg
+    
+End Sub
+
+Public Sub TestCoopManyMembers()
+
+    On Error GoTo ErrTestCoopManyMembers
+        
+    Dim Asserts As ClsAsserts
+    Set Asserts = New ClsAsserts
+
+    Dim evtStore As ClsEventStore
+    Set evtStore = New ClsEventStore
+    
+    Dim ws As DAO.Workspace
+    Set ws = DBEngine.CreateWorkspace("MyWorkspace", "Admin", "")
+    Call evtStore.Init(ws, CurrentProject.Path & "\EventSourcingBackend.accdb")
+   
+    ws.Databases(0).Execute "DELETE FROM domain_events"
+    
+    Dim Member As ClsCoopMember
+    Set Member = New ClsCoopMember
+    
+    Dim PostalAddr As ClsPostalAddress
+    Set PostalAddr = New ClsPostalAddress
+    With PostalAddr
+        .City = "Schorndorf"
+        .CountryCode = "DE"
+        .Street = "Schurwaldstr."
+        .StreetNumber = 105
+        .ZipCode = "73614"
+    End With
+    
+    Member.AcceptMembership "Hotzel", "Matthias", "Herr", _
+        PostalAddr, _
+        4, DateValue("2026-05-01")
+    
+    Member.ConfirmPayment 4, DateSerial(2026, 5, 2)
+    
+    Member.ChangeName "Lenker", DateSerial(2026, 7, 5)
+    
+    Dim Member2 As ClsCoopMember
+    Set Member2 = New ClsCoopMember
+    
+    Dim PostalAddr2 As ClsPostalAddress
+    Set PostalAddr2 = New ClsPostalAddress
+    With PostalAddr2
+        .City = "Schorndorf"
+        .CountryCode = "DE"
+        .Street = "Schurwaldstr."
+        .StreetNumber = 105
+        .ZipCode = "73614"
+    End With
+    
+    Member2.AcceptMembership "Lenker", "Sandra", "Frau", _
+        PostalAddr2, _
+        4, DateValue("2026-05-01")
+        
+    Member2.ChangeName "Hotzel", DateSerial(2026, 7, 20)
+    
+    evtStore.AddEvents Member.IAggregateRoot_ReleaseEvents
+    evtStore.AddEvents Member2.IAggregateRoot_ReleaseEvents
+    
+    Exit Sub
+
+    
+ErrTestCoopManyMembers:
     
     Dim errNo As Long: errNo = Err.Number
     Dim errMsg As String: errMsg = Err.Description

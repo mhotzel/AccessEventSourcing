@@ -29,15 +29,17 @@ Private m_AggregateRoot As IAggregateRoot
 Private m_UserName As String
 Private m_ComputerName As String
 Private m_EventSource As String
+Private m_AggregateType As String
 
 '=================================================================
 ' Initializes the AggregateRoot, "Constructor"
 '=================================================================
-Public Sub Init(ByRef pAggregate As IAggregateRoot, ByVal EventSource As String)
+Public Sub Init(ByRef pAggregate As IAggregateRoot, ByVal pEventSource As String, ByVal pAggregateType As String)
 
     isInitialized = True
     Set m_AggregateRoot = pAggregate
-    m_EventSource = EventSource
+    m_AggregateType = pAggregateType
+    m_EventSource = pEventSource
     m_UserName = Trim$(LCase$(Environ$("USERNAME")))
     m_ComputerName = Trim$(LCase$(Environ$("COMPUTERNAME")))
 
@@ -115,6 +117,8 @@ Public Sub RecordThat(ByRef pEvent As ClsDomainEvent)
     
     pEvent.AddEventSource m_EventSource
     pEvent.AddAuthId BuildAuthId
+    pEvent.AddAggregateType m_AggregateType
+    
     m_AggregateRoot.Apply pEvent
     EventBuffer.Add pEvent
 End Sub

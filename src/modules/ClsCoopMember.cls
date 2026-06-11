@@ -20,6 +20,7 @@ Implements IAggregateRoot
 Private Const AGG_TYPE_MEMBER = "Member"
 Private Const EVT_TYPE_MEMBER_ACCEPTED = "Member.Accepted"
 Private Const EVT_TYPE_NAME_CHANGED = "Member.Name.Changed"
+Private Const EVT_TYPE_PAYMENT_RECEIVED = "Member.Payment.Received"
 
 Private Const ERRNO_STREAM_EXISTS = 50104
 
@@ -35,10 +36,17 @@ Private m_LastName As String
 Private m_FirstName As String
 Private m_Title As String
 Private m_PostalAddress As ClsPostalAddress
-Private m_Shares As Long
+Private m_RequestedShares As Long
+Private m_PayendShares As Long
+Private m_MemberSince As Variant
+Private m_MembershipAccepted As Variant
 
 Public Property Get MemberId() As String
     MemberId = m_MemberId
+End Property
+
+Public Property Get MemberSince() As Date
+    MemberSince = m_MemberSince
 End Property
 
 Public Property Get LastName() As String
@@ -57,8 +65,12 @@ Public Property Get PostalAddress() As ClsPostalAddress
     Set PostalAddress = m_PostalAddress
 End Property
 
-Public Property Get Shares() As Long
-    Shares = m_Shares
+Public Property Get RequestedShares() As Long
+    RequestedShares = m_RequestedShares
+End Property
+
+Public Property Get PayendShares() As Long
+    PayendShares = m_PayendShares
 End Property
 
 '=================================================================
@@ -95,8 +107,8 @@ Public Sub AcceptMembership( _
     End With
     
     Dim De As ClsDomainEvent: Set De = New ClsDomainEvent
-    De.Init AGG_TYPE_MEMBER, EVT_TYPE_MEMBER_ACCEPTED, ModUUIDGenerator.GenerateUUIDv7, Payload.AsXML.xml
-    m_AggregateManager.RecordThat De
+    De.Init EVT_TYPE_MEMBER_ACCEPTED, ModUUIDGenerator.GenerateUUIDv7, Payload.AsXML.xml
+    AggregateManager.RecordThat De
 
 End Sub
 
@@ -118,8 +130,8 @@ Public Sub ChangeName(ByVal pLastName As String, _
     Payload.AddAttribute "validfrom", Format$(pValidFrom, "yyyy-MM-dd")
     
     Dim De As ClsDomainEvent: Set De = New ClsDomainEvent
-    De.Init AGG_TYPE_MEMBER, EVT_TYPE_NAME_CHANGED, Me.MemberId, Payload.AsXML.xml
-    m_AggregateManager.RecordThat De
+    De.Init EVT_TYPE_NAME_CHANGED, Me.MemberId, Payload.AsXML.xml
+    AggregateManager.RecordThat De
 
 End Sub
 
@@ -145,8 +157,16 @@ End Sub
 ' Confirms that the member payed the shares. The membership is
 ' active, when the member payed the shares,
 '=================================================================
-Public Sub ConfirmPayment(ByVal pPaymentRecieved As Date)
+Public Sub ConfirmPayment(ByVal pSharesPayed As Long, ByVal pPaymentRecieved As Date)
     
+    Dim Payload As ClsEventPayload
+    Set Payload = New ClsEventPayload
+    Payload.AddAttribute "paymentreceived", Format(pPaymentRecieved, "yyyy-MM-dd")
+    Payload.AddAttribute "sharespayed", pSharesPayed
+    
+    Dim De As ClsDomainEvent: Set De = New ClsDomainEvent
+    De.Init EVT_TYPE_PAYMENT_RECEIVED, Me.MemberId, Payload.AsXML.xml
+    AggregateManager.RecordThat De
 End Sub
 
 '=================================================================
@@ -174,10 +194,11 @@ Public Sub IAggregateRoot_Apply(ByRef pEvent As ClsDomainEvent)
             ApplyMemberAccepted pEvent
         Case EVT_TYPE_NAME_CHANGED
             ApplyMemberNameChanged pEvent
+        Case EVT_TYPE_PAYMENT_RECEIVED
+            ApplyPaymentReceived pEvent
     End Select
 
 End Sub
-
 
 '=================================================================
 ' Applies the Acceptance of a new member
@@ -202,10 +223,10 @@ Private Sub ApplyMemberAccepted(ByRef pEvent As ClsDomainEvent)
         .ZipCode = Payload.GetAttribute("zipcode")
     End With
     
-    m_Shares = CLng(Payload.GetAttribute("shares"))
+    m_RequestedShares = CLng(Payload.GetAttribute("shares"))
+    m_MembershipAccepted = DateValue(Payload.GetAttribute("accepted"))
     
 End Sub
-
 
 Public Function IAggregateRoot_ReleaseEvents() As Collection
     Set IAggregateRoot_ReleaseEvents = m_AggregateManager.ReleaseEvents
@@ -224,10 +245,28 @@ Public Sub ApplyMemberNameChanged(ByRef pEvent As ClsDomainEvent)
     
 End Sub
 
+'=================================================================
+' Applies the Confirmation, that the member payed the shares
+'=================================================================
+Public Sub ApplyPaymentReceived(ByRef pEvent As ClsDomainEvent)
+
+    Dim Payload As ClsEventPayload
+    Set Payload = New ClsEventPayload
+    Payload.ReadXml pEvent.Data
+    
+    m_PayendShares = m_PayendShares + CLng(Payload.GetAttribute("sharespayed"))
+    If PayendShares >= RequestedShares Then
+        m_MemberSince = Payload.GetAttribute("paymentreceived")
+    End If
+    
+End Sub
+
 Private Sub Class_Initialize()
 
     m_UserName = Environ("USERNAME")
     m_ComputerName = Environ("COMPUTERNAME")
+    m_MemberSince = Null
+    m_MembershipAccepted = Null
 
 End Sub
 
@@ -236,5 +275,5 @@ Private Property Get AggregateManager() As ClsAggregateManager
         Set m_AggregateManager = New ClsAggregateManager
     End If
     Set AggregateManager = m_AggregateManager
-    AggregateManager.Init Me, "DlsManager"
+    AggregateManager.Init Me, "DlsManager", "Member"
 End Property
